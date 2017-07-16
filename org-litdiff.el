@@ -41,6 +41,35 @@
   )
 )
 
+(defun ol-code-block-at-point ()
+  (interactive)
+  (org-between-regexps-p "^[ \t]*#\\+NAME:.*" "^[ \t]*#\\+end_.*")
+)
+
+(defun ol-parse-code-block-at-point ()
+  (interactive)
+  (let (
+      (msg "No or invalid code block found at point.")
+      (block (ol-code-block-at-point))
+    )
+    (unless block (user-error msg))
+    (let* (
+        (block (ol-code-block-at-point))
+        (code (buffer-substring-no-properties (car block) (cdr block)))
+        (s "#\\+NAME: ol::\\([/a-zA-Z0-1-_.]+\\)::\\([a-zA-Z0-9_-]+\\)::\\([a-z0-9-_.]+\\)")
+      )
+      (unless (string-match s code) (user-error msg))
+      (let* (
+          (file-path (match-string 1 code))
+          (scope (match-string 2 code))
+          (name (match-string 3 code))
+        )
+        '(file-path scope name)
+      )
+    )
+  )
+)
+
 (defun ol-find-lines-by-tag-name (name)
   (let*
     (
@@ -53,10 +82,6 @@
     )
     (cons line end)
   )
-)
-
-(defun ol-code-block-at-point ()
-  (org-between-regexps-p "^[ \t]*#\\+NAME:.*" "^[ \t]*#\\+end_.*")
 )
 
 (defun ol-delete-block ()
@@ -109,6 +134,7 @@
 ;; TODO: Save buffer if it open.
 (defun ol-refresh-code-block ()
   (interactive)
+  (print (car (ol-parse-code-block-at-point)))
   (let* (
       (block (ol-code-block-at-point))
       (code (buffer-substring-no-properties (car block) (cdr block)))
@@ -155,3 +181,5 @@
     )
   )
 )
+
+multiple-value-bind 
