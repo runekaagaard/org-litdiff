@@ -18,6 +18,10 @@
   )
 )
 
+(defun ol-lines-from-file (file-path begin end)
+  (shell-command-to-string (format "sed -n %s,%sp %s" line end file-path))
+)
+
 (defun ol-generate-tags (file-path)
   (call-process-shell-command (format "
     %s/ctags --fields=* -o - %s | grep -e '!_TAG' -e 'end:' > %s"
@@ -56,7 +60,7 @@
     (let* (
         (block (ol-code-block-at-point))
         (code (buffer-substring-no-properties (car block) (cdr block)))
-        (s "#\\+NAME: ol::\\([/a-zA-Z0-1-_.]+\\)::\\([a-zA-Z0-9_-]+\\)::\\([a-z0-9-_.]+\\)")
+        (s "#\\+NAME: ol::\\([/a-zA-Z0-1-_.]+\\)::\\([a-zA-Z0-9-_.]+\\)::\\([A-za-z0-9-_]+\\)")
       )
       (unless (string-match s code) (user-error msg))
       (let* (
@@ -64,22 +68,30 @@
           (scope (match-string 2 code))
           (name (match-string 3 code))
         )
-        '(file-path scope name)
+        (list file-path scope name)
       )
     )
   )
 )
 
-(defun ol-find-lines-by-tag-name (name)
+(defun ol-find-lines-by-tag-name (name scope)
   (let*
     (
+      (s
+        (if (equal scope "root")
+          "%s/readtags -e -n -t %s -Q '(and (eq? $name \"%s\"))' -l"
+          "%s/readtags -e -n -t %s -Q '(and (eq? $name \"%s\") (eq? $scope-name \"%s\"))' -l"
+        )
+      )
       (output (car (split-string (ol-chomp (shell-command-to-string (format
-        "%s/readtags -e -n -t %s -Q '(and (eq? $name \"%s\"))' -l"
-        ol-ctags-dir ol-tag-file name
-        ))) "\n")))
+        s
+        ol-ctags-dir ol-tag-file name scope
+        ))) "\n"))
+      )
       (line (ol-read-field output "line"))
       (end (ol-read-field output "end"))
     )
+    
     (cons line end)
   )
 )
@@ -94,10 +106,12 @@
       (user-error "Not in a block"))))
 
 (defun ol-insert-code-block (code type file-path name scope)
-  (insert (concat "#+NAME: ol::" file-path "::" scope "::" name "\n"))
-  (insert (concat "#+BEGIN_SRC " type "\n"))
-  (insert code)
-  (insert "#+END_SRC\n")
+  (insert (concat
+    "#+NAME: ol::" file-path "::" scope "::" name "\n"
+    "#+BEGIN_SRC " type "\n"
+    code
+    "#+END_SRC\n"
+  ))
 )
 
 (defun ol-on ()
@@ -119,12 +133,12 @@
       (tag-info (ol-find-tag-by-lineno))
       (name (car tag-info))
       (scope (cdr tag-info))
-      (lines (ol-find-lines-by-tag-name name))
+      (lines (ol-find-lines-by-tag-name name scope))
       (line (car lines))
       (end (cdr lines))
       (language (replace-regexp-in-string "-mode" "" (message "%s" major-mode)))
       (file-path (file-truename buffer-file-name))
-      (code (shell-command-to-string (format "sed -n %s,%sp %s" line end file-path)))
+      (code (ol-lines-from-file file-path line end))
     )
     (set-buffer ol-active-buffer)
     (ol-insert-code-block code language file-path name scope)
@@ -134,27 +148,19 @@
 ;; TODO: Save buffer if it open.
 (defun ol-refresh-code-block ()
   (interactive)
-  (print (car (ol-parse-code-block-at-point)))
   (let* (
-      (block (ol-code-block-at-point))
-      (code (buffer-substring-no-properties (car block) (cdr block)))
-      (s "#\\+NAME: ol::\\([/a-zA-Z0-1-_.]+\\)::\\([a-zA-Z0-9_-]+\\)::\\([a-z0-9-_.]+\\)")
+      (block (ol-parse-code-block-at-point))   
+      (file-path (pop block))
+      (scope (pop block))
+      (name (pop block))
+      (noop (ol-generate-tags file-path))
+      (lines (ol-find-lines-by-tag-name name scope))
+      (line (car lines))
+      (end (cdr lines))
+      (code (ol-lines-from-file file-path line end))
     )
-    (if (string-match s code)
-        (let* (
-            (file-path (match-string 1 code))
-            (noop (ol-generate-tags file-path))
-            (scope (match-string 2 code))
-            (name (match-string 3 code))
-            (lines (ol-find-lines-by-tag-name name))
-            (line (car lines))
-            (end (cdr lines))
-            (code (shell-command-to-string (format "sed -n %s,%sp %s" line end file-path)))
-          )
-          (ol-delete-block)
-          (ol-insert-code-block code "python" file-path name scope)
-        )
-    )
+    (ol-delete-block)
+    (ol-insert-code-block code "python" file-path name scope)
   )
 )
 
@@ -182,4 +188,3 @@
   )
 )
 
-multiple-value-bind 
