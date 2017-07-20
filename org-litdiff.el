@@ -32,6 +32,8 @@
 )
 
 (defun ol-lines-from-file (file-path begin end)
+  (unless begin (error "Missing begin."))
+  (unless end (error "Missing end."))
   (shell-command-to-string (format "sed -n %s,%sp %s" line end file-path))
 )
 
@@ -61,7 +63,18 @@
 
 (defun ol-code-block-at-point ()
   (interactive)
+  (re-search-forward "^[ \t]*#\\+NAME:.*" nil t)
   (org-between-regexps-p "^[ \t]*#\\+NAME:.*" "^[ \t]*#\\+end_.*")
+)
+
+(defun ol-prop (name)
+  (let (
+    (val (org-entry-get (point) (concat "ol-" name)))
+    )
+    (unless val user-error "No or invalid code block found at point.")
+    val
+  )
+  ;val
 )
 
 (defun ol-parse-code-block-at-point ()
@@ -119,15 +132,27 @@
 	(delete-region (car blockp) (cdr blockp))
       (user-error "Not in a block"))))
 
-(defun ol-insert-code-block (code type file-path name scope)
+(defun ol-insert-code-block (code language file-path name scope is-new)
+  (when is-new
+    (org-insert-heading-respect-content)
+    (insert (concat
+      file-path " " scope " " name "\n"
+    ))
+    (org-set-property "ol-file-path" file-path)
+    (org-set-property "ol-language" language)
+    (org-set-property "ol-scope" scope)
+    (org-set-property "ol-name" name)
+  )
   (insert (concat
+    "\n"      
     "#+NAME: ol::" file-path "::" scope "::" name "\n"
-    "#+BEGIN_SRC " type "\n"
+    "#+BEGIN_SRC " language "\n"
     code
     "#+END_SRC\n"
   ))
 )
-  
+
+(org-entry-get (point-marker) "ol-name")
 ;;;;;;;;;;;;;;;;;;;
 
 (defun ol-on ()
@@ -156,17 +181,16 @@
       (code (ol-lines-from-file file-path line end))
     )
     (set-buffer ol-active-buffer)
-    (ol-insert-code-block code language file-path name scope)
+    (ol-insert-code-block code language file-path name scope t)
   )
 )
 
 (defun ol-refresh-code-block ()
   (interactive)
   (let* (
-      (block (ol-parse-code-block-at-point))   
-      (file-path (pop block))
-      (scope (pop block))
-      (name (pop block))
+      (file-path (ol-prop "file-path"))
+      (scope (ol-prop "scope"))
+      (name (ol-prop "name"))
       (noop (ol-generate-tags file-path))
       (lines (ol-find-lines-by-tag-name name scope))
       (line (car lines))
@@ -174,7 +198,7 @@
       (code (ol-lines-from-file file-path line end))
     )
     (ol-delete-block)
-    (ol-insert-code-block code "python" file-path name scope)
+    (ol-insert-code-block code "python" file-path name scope nil)
   )
 )
 
@@ -183,15 +207,12 @@
   (if (equal (current-buffer) ol-active-buffer)
     (progn
       (let* (
-          (block (ol-parse-code-block-at-point))   
-          (file-path (pop block))
-          (scope (pop block))
-          (name (pop block))
-          (noop (ol-generate-tags file-path))
-          (lines (ol-find-lines-by-tag-name name scope))
+          (noop (ol-generate-tags (ol-prop "file-path")))
+          (lines (ol-find-lines-by-tag-name (ol-prop "name")
+                                            (ol-prop "scope")))
           (line (car lines))
         )
-        (find-file-other-window file-path)
+        (find-file-other-window (ol-prop "file-path"))
         (goto-line (string-to-int line))
         (reposition-window)
       )
