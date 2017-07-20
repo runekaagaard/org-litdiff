@@ -10,6 +10,19 @@
         (setq str (replace-match "" t t str)))
       str)
 
+(defun ol-save-buffer-visiting (file-path)
+  (let (
+      (other-buf (find-buffer-visiting file-path))
+    )
+    (save-excursion
+      (if other-buf (progn
+        (set-buffer other-buf)
+        (save-buffer)
+      ))
+    )
+  )
+)
+
 (defun ol-read-field (line name)
   (let ((s (concat name ":\\([^\t]+\\)")))
     (if (string-match s line)
@@ -114,15 +127,7 @@
     "#+END_SRC\n"
   ))
 )
-
-(defun ol-save-buffer-visiting (file-path)
-  (let (
-      (buf (find-buffer-visiting))
-    )
-    (if buf (save-buffer buf))
-  )
-)
-
+  
 ;;;;;;;;;;;;;;;;;;;
 
 (defun ol-on ()
@@ -155,7 +160,6 @@
   )
 )
 
-;; TODO: Save buffer if it open.
 (defun ol-refresh-code-block ()
   (interactive)
   (let* (
@@ -195,4 +199,3 @@
     (pop-to-buffer ol-active-buffer)
   )
 )
-
