@@ -63,6 +63,7 @@
 
 (defun ol-code-block-at-point ()
   (interactive)
+  (outline-back-to-heading)
   (re-search-forward "^[ \t]*#\\+NAME:.*" nil t)
   (org-between-regexps-p "^[ \t]*#\\+NAME:.*" "^[ \t]*#\\+end_.*")
 )
@@ -74,7 +75,6 @@
     (unless val user-error "No or invalid code block found at point.")
     val
   )
-  ;val
 )
 
 (defun ol-parse-code-block-at-point ()
@@ -142,17 +142,16 @@
     (org-set-property "ol-language" language)
     (org-set-property "ol-scope" scope)
     (org-set-property "ol-name" name)
+    (insert "\n")
   )
-  (insert (concat
-    "\n"      
+  (insert (concat      
     "#+NAME: ol::" file-path "::" scope "::" name "\n"
     "#+BEGIN_SRC " language "\n"
     code
-    "#+END_SRC\n"
+    "#+END_SRC"
   ))
 )
 
-(org-entry-get (point-marker) "ol-name")
 ;;;;;;;;;;;;;;;;;;;
 
 (defun ol-on ()
@@ -197,8 +196,34 @@
       (end (cdr lines))
       (code (ol-lines-from-file file-path line end))
     )
-    (ol-delete-block)
-    (ol-insert-code-block code "python" file-path name scope nil)
+    (save-excursion
+      (ol-delete-block)
+      (ol-insert-code-block code "python" file-path name scope nil)
+    )
+  )
+)
+
+
+
+(defun ol-refresh ()
+  (interactive)
+  (let (
+      (parsetree (org-element-parse-buffer 'headline))
+    ) 
+    (org-element-map parsetree 'headline
+      (lambda (hl)
+        (let (
+            (begin (org-element-property :begin hl))
+          )
+          (when (org-entry-get begin "ol-name")
+            (save-excursion
+              (goto-char begin)
+              (ol-refresh-code-block)
+            )
+          )
+        )
+      )
+    )
   )
 )
 
