@@ -23,6 +23,7 @@
 )
 
 (defun ol-generate-tags (file-path)
+  (ol-save-buffer-visiting file-path)
   (call-process-shell-command (format "
     %s/ctags --fields=* -o - %s | grep -e '!_TAG' -e 'end:' > %s"
     ol-ctags-dir
@@ -114,6 +115,16 @@
   ))
 )
 
+(defun ol-save-buffer-visiting (file-path)
+  (let (
+      (buf (find-buffer-visiting))
+    )
+    (if buf (save-buffer buf))
+  )
+)
+
+;;;;;;;;;;;;;;;;;;;
+
 (defun ol-on ()
   (interactive)
   (setq ol-active-buffer (current-buffer))
@@ -127,7 +138,6 @@
 ; TODO: Check if not already included. Handle errors.
 (defun ol-include-tag ()
   (interactive)
-  (save-buffer)
   (ol-generate-tags (file-truename buffer-file-name))
   (let* (
       (tag-info (ol-find-tag-by-lineno))
@@ -166,25 +176,23 @@
 
 (defun ol-jump ()
   (interactive)
-  (let* (
-      (block (ol-code-block-at-point))
-      (code (buffer-substring-no-properties (car block) (cdr block)))
-      (s "#\\+NAME: ol::\\([/a-zA-Z0-1-_.]+\\)::\\([a-zA-Z0-9_-]+\\)::\\([a-z0-9-_.]+\\)")
-    )
-    (if (string-match s code)
-        (let* (
-            (file-path (match-string 1 code))
-            (noop (ol-generate-tags file-path))
-            (scope (match-string 2 code))
-            (name (match-string 3 code))
-            (lines (ol-find-lines-by-tag-name name))
-            (line (car lines))
-          )
-          (find-file-other-window file-path)
-          (goto-line (string-to-int line))
-          (reposition-window)
+  (if (equal (current-buffer) ol-active-buffer)
+    (progn
+      (let* (
+          (block (ol-parse-code-block-at-point))   
+          (file-path (pop block))
+          (scope (pop block))
+          (name (pop block))
+          (noop (ol-generate-tags file-path))
+          (lines (ol-find-lines-by-tag-name name scope))
+          (line (car lines))
         )
+        (find-file-other-window file-path)
+        (goto-line (string-to-int line))
+        (reposition-window)
+      )
     )
+    (pop-to-buffer ol-active-buffer)
   )
 )
 
